@@ -122,6 +122,19 @@ public final class ChessBoard extends JComponent
 		holdingPieceIndex = -1;
 	}
 	
+	public ChessSoldier getPieceAtPoint(Point p)
+	{
+		ChessSoldier occupant = null;
+		for(ChessSoldier c:chessPieces)
+		{
+			if(c.position.equals(p))
+			{
+				occupant = c;
+			}
+		}
+		
+		return occupant;
+	}
 	//move the piece around in a fluid way.
 	public void dragPieceAtMouse(Point mouseCursor)
 	{
@@ -138,7 +151,7 @@ public final class ChessBoard extends JComponent
 		{
 			if(s.getType().equals("king") && (s.getTeam() == team))
 			{
-				return s.position;
+				return new Point(s.position);
 			}
 		}
 		return new Point(-1, -1);
@@ -148,7 +161,6 @@ public final class ChessBoard extends JComponent
 	//not very good OOP practice here,... but I've been coding for, like 11 hours and I'm sleepy, darnit!
 	boolean isPathOpen(Point start, Point end, ArrayList<ChessSoldier> board)
 	{
-		//pathCount++;
 		Point dP = new Point((int)Math.signum(end.x-start.x), (int)Math.signum(end.y-start.y));
 		System.out.println("dP = " + dP);
 		ChessSoldier lineSearchOccupant = null;
@@ -384,7 +396,7 @@ public final class ChessBoard extends JComponent
 		if(doCastle && !moveRestricted)
 		{
 			int n = JOptionPane.showConfirmDialog(this,
-					"Are you sure you want to castle",
+					"Are you sure you want to castle?",
 					"Castle",
 					JOptionPane.YES_NO_OPTION);
 
@@ -397,7 +409,8 @@ public final class ChessBoard extends JComponent
 			}
 			else
 			{
-				
+				//leave pieces in current position
+				moveRestricted = true;
 			}
 			occupant = null;
 		}
@@ -449,14 +462,87 @@ public final class ChessBoard extends JComponent
 			currentTeam++;
 			currentTeam %= 2;
 			
+			boolean checkFlag = false;
+			boolean mateFlag = false;
+			
 			//check and see if king of opposite team is in check.
 			Point oppositeKingPoint = this.getKingPosition(this.chessPieces, currentTeam);
 			ArrayList<ChessSoldier> checkThreats = this.soldiersCheckingSpace(oppositeKingPoint, chessPieces, prevTeam);
 			if(checkThreats.size() > 0)
 			{
-				messageList.add(0, this.teamNames[currentTeam] + "'s king is checked!");
+				System.out.println("check");
+				checkFlag = true;
+				mateFlag = true;
+				
+				/*
+				 * check to see if the king of the opposite team is in checkmate.  This
+				 * condition is met if the king is in check AND any of the following:
+				 *		-not all of the checkThreats may be killed.
+				 *		-all the surrounding spaces are checked.
+				 */
+				
+				//if there is only one threat, it may be blocked or killed.  If
+				//there is more than one threat, they may not be both blocked and/
+				//or killed in the same turn.
+				if(checkThreats.size() == 1)
+				{
+					Point threatPoint = new Point(checkThreats.get(0).position);
+					
+					//check to see if there are any members of the king's team checking
+					//the piece that is a threat to the king.  This would disqualify a checkmate.
+					if(this.soldiersCheckingSpace(threatPoint, chessPieces, currentTeam).size() > 0)
+					{
+						System.out.println("kill");
+						mateFlag = false;
+					}
+					else if(!checkThreats.get(0).getType().equals("knight"))
+					{
+						Point dP = new Point((int)Math.signum(oppositeKingPoint.x-threatPoint.x), (int)Math.signum(oppositeKingPoint.y-threatPoint.y));
+
+						//if the threat piece is not a knight and there is a piece
+						//guarding the space between the king and the threat, no checkmate
+						for(Point checkSpace = new Point(oppositeKingPoint.x+dP.x, oppositeKingPoint.y+dP.y);!checkSpace.equals(threatPoint) && chessDomain.contains(checkSpace);checkSpace.x += dP.x, checkSpace.y += dP.y)
+						{
+							if(!this.soldiersCheckingSpace(checkSpace, chessPieces, currentTeam).isEmpty())
+							{
+								System.out.println("block");
+								mateFlag = false;
+							}
+						}
+					}
+				}
+				//check all surrounding spaces to see if any are open
+				Point kingTemp = new Point(oppositeKingPoint);
+
+				for(kingTemp.x = oppositeKingPoint.x-1;kingTemp.x <= oppositeKingPoint.x+1;kingTemp.x++)
+				{
+					for(kingTemp.y = oppositeKingPoint.y-1;kingTemp.y <= oppositeKingPoint.y+1;kingTemp.y++)
+					{
+						if(!kingTemp.equals(oppositeKingPoint) && chessDomain.contains(kingTemp))
+						{
+							//if space is open and not our space, it is not checkmate
+							if(this.soldiersCheckingSpace(kingTemp, chessPieces, prevTeam).isEmpty() && (getPieceAtPoint(kingTemp) == null))
+							{
+								System.out.println("openSpace");
+								mateFlag = false;
+							}
+						}
+					}
+				}
+				
+				//at this point, we have a checkmate
+				if(mateFlag)
+				{
+					System.exit(1);
+				}
+				else
+				{
+					messageList.add("checknomate");
+				}
 			}
 		}
+		
+		//we didn't move the piece, set it down where it was.
 		else
 		{
 			chessPieces.get(holdingPieceIndex).setDown(chessPieces.get(holdingPieceIndex).position);
